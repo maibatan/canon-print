@@ -1,0 +1,28 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  software:
+    # LEVEL 1 + LEVEL 2. No printer in CI: hardware levels are local/VM only.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: bash scripts/software-tests.sh --out artifacts
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: software-artifacts
+          path: artifacts/
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/test-docker.sh

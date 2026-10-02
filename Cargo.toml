@@ -1,0 +1,29 @@
+[package]
+name = "canon-print"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Direct USB printing for Canon LBP2900 (CAPT) without CUPS"
+license = "GPL-3.0-or-later"
+publish = false
+default-run = "canon-print"
+
+[features]
+default = []
+# Enables tests that talk to a real printer. Never on by default:
+# a hardware print is an explicit action (./scripts/agent-test.sh --hardware).
+hardware-tests = []
+# Build libusb from source and link it statically (used for the static musl release
+# binary that runs on any x86_64 Linux regardless of glibc/libusb versions).
+vendored-libusb = ["rusb/vendored"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+rusb = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
+thiserror = "1"
+
+[profile.release]
+debug = false

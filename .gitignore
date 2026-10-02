@@ -1,0 +1,4 @@
+research/
+target/
+artifacts/
+tests/hardware-fixtures/*.pbm
