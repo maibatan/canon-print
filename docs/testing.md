@@ -95,8 +95,39 @@ demand (`cargo run --bin gen-fixtures -- --pages … --hardware …`).
 - Level 2 compression round trip: **PASS** (decode(encode(x)) == x, deterministic, END type 0,
   whole band consumed or exactly the `BC BC BC BC` padding word left).
 - Docker: implemented; SKIPPED when no Docker daemon is running.
-- USB diagnose: implemented (`canon-print diagnose|inspect|list`, `check-hardware.sh`);
-  not yet run against the real printer.
-- Mock transport / state machine tests: not implemented yet (Phase 6).
-- `print --dry-run`: parses + encodes (A4 page ≈ 0.5 s CPU), never opens USB.
-- Real printer job: not implemented (the `print` command stops at stage `detect`).
+- USB diagnose: implemented (`canon-print diagnose|inspect|list`, `check-hardware.sh`); run on
+  the real LBP2900 (VMware, Ubuntu 22.04): all checks PASS except the expected `usblp` WARN.
+- Session / state machine: tested against `MockTransport` and `FakePrinter` (busy after IDENT,
+  UNINIT until UPLOAD_2, page counters, out of paper, ignored FIRE, multi-page, timeouts).
+- Real printer: `status` and `print` verified on the real LBP2900 — 1-page PBM, 2-page PDF;
+  FIRE (paper starts moving) ~2.5 s after start. Physical pages checked by eye only.
+
+## PDF rendering and tone
+
+PDF pages are rendered by Ghostscript as 8-bit gray (`pgmraw`) and halftoned by
+`src/raster/halftone.rs` with Ghostscript's default 600 dpi screen + transfer, applied once.
+
+| Check | Result |
+|---|---|
+| Screen transcription (`GS_SCREEN_600`) | measured from a 256-level ramp, identical in gs 9.55.0 and 10.02.1 |
+| Unit tests | coverage of flat grays equals the gs ramp measurement; 0/255 stay solid; monotone |
+| `tone_does_not_depend_on_transparency` | ramp prints bit-identically with and without a soft-masked image on the page (old pipeline on gs 10: 1.6 % of the ramp dots differed, ~13 % lighter) |
+| `matches_ghostscript_halftone_on_pages_without_transparency` | vs `gs -sDEVICE=pbmraw`: 0.013 % of dots differ |
+| `broken_pdf_reports_ghostscript_error` | Ghostscript's message reaches the user (gs text kept off stdout with `-sstdout=%stderr`) |
+| Two real reports (not committed: patient data) | vs what the VM prints today (gs 9.55 pbmraw): 0.012 % of dots differ; image-column coverage 0.5604 vs 0.5601 and 0.2652 vs 0.2648 (old pipeline on gs 10: 0.5413 / 0.2442) |
+| Speed / memory | 0.2–0.35 s per A4 page; pages are streamed (6-page PDF: 58 MB RSS) |
+
+Fixtures: `tests/fixtures/tone_ramp.pdf`, `tone_ramp_smask.pdf` (synthetic, written by
+`scripts/make-tone-fixtures.py`).
+
+Ghostscript failures (unix tests run a fake `gs` shell script, no real Ghostscript needed):
+
+| Test | Checks |
+|---|---|
+| `stuck_ghostscript_times_out_as_render_stage` | no output for the idle limit (120 s; 0.5 s in the test) → gs is stopped, `Timeout` with stage `render` (nothing sent: HHH-Bridge falls back to CUPS) |
+| `stuck_wrapper_child_is_stopped_too` | a wrapper script's child holding the pipes is stopped as well (own process group) |
+| `wrong_size_header_fails_before_reading_the_body` | a page of the wrong size fails at the header, without reading its body |
+| `ghostscript_crash_is_reported_as_such` | gs killed by a signal mid-page → "Ghostscript failed (signal …)", not just "truncated" |
+| `non_utf8_stderr_is_kept`, `gs_text_keeps_the_end_and_replaces_invalid_utf8` | gs messages with raw PDF bytes survive; long text keeps its last 4000 bytes |
+| `warnings_of_a_successful_render_are_returned` | complaints of a successful render reach `job.render_warnings` in the JSON summary |
+| `detects_pdf_and_loads_pbm` | `%PDF-` found after leading junk; a PBM magic wins over a chance `%PDF-` in pixel data; empty file → input error |

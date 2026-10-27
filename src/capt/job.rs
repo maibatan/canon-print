@@ -192,14 +192,10 @@ impl<'a, T: UsbTransport> PrintJob<'a, T> {
         }
     }
 
-    /// Whole job: `pages` = encoded bands of each page, printed in order in one job
-    /// (captdriver prints every page of a CUPS job inside one JOB_BEGIN/JOB_END).
-    pub fn run(
-        &mut self,
-        page: &PageParams,
-        params: &Params,
-        pages: &[Vec<Vec<u8>>],
-    ) -> Result<()> {
+    /// Whole job: `pages` = encoded bands of each sheet, printed in order in one job
+    /// (captdriver prints every page of a CUPS job inside one JOB_BEGIN/JOB_END). Copies
+    /// are passed as repeated references to the same encoded page, not as clones.
+    pub fn run(&mut self, page: &PageParams, params: &Params, pages: &[&[Vec<u8>]]) -> Result<()> {
         self.started = Instant::now();
         let result = if pages.is_empty() {
             Err(CanonError::Input("no page to print".into()))
@@ -222,7 +218,7 @@ impl<'a, T: UsbTransport> PrintJob<'a, T> {
         &mut self,
         page: &PageParams,
         params: &Params,
-        pages: &[Vec<Vec<u8>>],
+        pages: &[&[Vec<u8>]],
     ) -> Result<()> {
         let t = job_time_now();
 
@@ -456,7 +452,7 @@ mod tests {
         let (page, b) = bands();
         let mut s = Session::new(printer, Duration::from_millis(100));
         let mut job = PrintJob::new(&mut s, fast());
-        let r = job.run(&page, &DEFAULT_PARAMS, &[b]);
+        let r = job.run(&page, &DEFAULT_PARAMS, &[&b]);
         let report = job.report.clone();
         (r, report, s.transport)
     }
@@ -504,8 +500,7 @@ mod tests {
         let (page, b) = bands();
         let mut s = Session::new(FakePrinter::default(), Duration::from_millis(100));
         let mut job = PrintJob::new(&mut s, fast());
-        job.run(&page, &DEFAULT_PARAMS, &[b.clone(), b.clone(), b])
-            .unwrap();
+        job.run(&page, &DEFAULT_PARAMS, &[&b, &b, &b]).unwrap();
         let report = job.report.clone();
         let p = s.transport;
         assert_eq!(report.pages_printed, 3);

@@ -1,6 +1,6 @@
 [package]
 name = "canon-print"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.75"
 description = "Direct USB printing for Canon LBP2900 (CAPT) without CUPS"
@@ -24,6 +24,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
 thiserror = "1"
+
+[target.'cfg(unix)'.dependencies]
+# stop Ghostscript's whole process group (raster/pdf.rs); already in the tree via rusb
+libc = "0.2"
 
 [profile.release]
 debug = false

@@ -5,8 +5,10 @@
 //! to a whole byte. Padding bits are always kept at 0 so that identical images
 //! always have identical bytes (determinism).
 
+pub mod halftone;
 pub mod pbm;
 pub mod pdf;
+pub mod pgm;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Bitmap {

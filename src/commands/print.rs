@@ -74,11 +74,14 @@ pub fn run(file: &Path, o: &PrintOptions) -> Outcome {
             CanonError::Input(format!("copies must be 1..={MAX_COPIES}")),
         );
     }
-    let images = match pdf::load_pages(file, paper) {
+    let pdf::Loaded {
+        pages: images,
+        warnings,
+    } = match pdf::load_pages(file, paper) {
         Ok(p) => p,
         Err(e) => {
-            // Ghostscript missing is an environment problem, not bad input
-            let stage = if matches!(e, CanonError::Permission(_)) {
+            // Ghostscript missing or stuck is an environment problem, not bad input
+            let stage = if matches!(e, CanonError::Permission(_) | CanonError::Timeout { .. }) {
                 "render"
             } else {
                 "input"
@@ -108,9 +111,10 @@ pub fn run(file: &Path, o: &PrintOptions) -> Outcome {
     }
     stages.insert("encode".into(), json!("PASS"));
 
-    // collated copies: the whole document `copies` times, in one job
-    let job_pages: Vec<Vec<Vec<u8>>> = (0..o.copies)
-        .flat_map(|_| encoded.iter().cloned())
+    // collated copies: the whole document `copies` times, in one job (references, so 99
+    // copies do not hold 99 copies of the encoded pages in memory)
+    let job_pages: Vec<&[Vec<u8>]> = (0..o.copies)
+        .flat_map(|_| encoded.iter().map(Vec::as_slice))
         .collect();
     let compressed: Vec<usize> = encoded
         .iter()
@@ -127,6 +131,8 @@ pub fn run(file: &Path, o: &PrintOptions) -> Outcome {
         "bands_per_page": lines.div_ceil(hiscoa::BAND_LINES),
         "compressed_bytes_per_page": compressed,
         "set_parm_page_hex": hex(&params.to_bytes()),
+        // Ghostscript's complaints about a document it still rendered (e.g. a missing page)
+        "render_warnings": warnings,
     });
 
     if o.dry_run {

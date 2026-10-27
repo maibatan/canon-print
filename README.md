@@ -3,16 +3,29 @@
 Rust CLI to print on a **Canon LBP2900 / LBP2900B** directly over USB (CAPT 2.1 + Hi-SCoA),
 without CUPS, cupsd, ccpd, lp or lpr.
 
-**Status: work in progress.** USB diagnosis, the test infrastructure and the Hi-SCoA encoder
-(byte-identical to captdriver) work; talking to the printer does not yet. See [docs/testing.md](docs/testing.md) for exactly what is verified.
+**Status:** prints A4/A5 PDF and PBM files on a real LBP2900 (one or more pages, copies in one
+job). Used by HHH-Bridge on Linux. See [docs/testing.md](docs/testing.md) for exactly what is verified.
 
 ```
-canon-print list [--all] [--json]      Canon LBP printers on USB
-canon-print inspect [--json]           descriptors, interfaces, endpoints, kernel driver
-canon-print diagnose [--json]          environment + USB checks (never changes the host)
-canon-print print FILE.pbm [--json]    staged print (currently stops at stage "detect")
-canon-print print FILE.pbm --dry-run   parse + Hi-SCoA encode only, never opens USB
+canon-print list [--all] [--json]          Canon LBP printers on USB
+canon-print inspect [--json]               descriptors, interfaces, endpoints, kernel driver
+canon-print diagnose [--json]              environment + USB checks (never changes the host)
+canon-print status [--detach-kernel-driver] identify + status, prints nothing
+canon-print print FILE [--paper a4|a5] [--copies N] [--detach-kernel-driver] [--json]
+canon-print print FILE --dry-run           render + Hi-SCoA encode only, never opens USB
+render-pdf FILE [--paper a4|a5]            (dev tool) write the 1-bit pages as PBM files
 ```
+
+## How a PDF becomes dots
+
+Ghostscript (`gs`, runtime dependency for PDF input only) renders each page to 8-bit gray at
+600 dpi, scaled to fit the LBP2900's printable area (A4 4722 × 6780 dots, A5 3264 × 4722).
+canon-print then halftones it with **Ghostscript's own default screen and transfer** (106 lpi,
+45°, `{0.8 exp}`, transcribed in `src/raster/halftone.rs`). The result equals what Ghostscript
+9.55 / CUPS + captdriver print (0.01 % of dots differ), but it no longer depends on the
+installed Ghostscript: gs ≥ 9.56 applies its transfer twice on pages with transparency (e.g.
+digitally signed reports with soft-masked images), which printed photos ~13 % lighter.
+Black toner only: colour images always print as gray.
 
 Exit codes: `0` success, `1` input/software, `2` USB, `3` printer/protocol, `4` timeout,
 `5` permission/environment.
